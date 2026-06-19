@@ -14,7 +14,7 @@ YEAR = 2022
 START_DATE = datetime(YEAR, 1, 1)
 END_DATE = datetime(YEAR, 12, 31)
 
-OUTPUT_FILE = f"../data/raw/aemet_{YEAR}.csv"
+OUTPUT_FILE = f"data/raw/aemet_{YEAR}.csv"
 
 HEADERS = {"api_key": API_KEY}
 
