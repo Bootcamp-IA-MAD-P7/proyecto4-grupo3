@@ -16,6 +16,8 @@ END_DATE = datetime(YEAR, 12, 31)
 
 OUTPUT_FILE = f"data/raw/aemet_{YEAR}.csv"
 
+os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
+
 HEADERS = {"api_key": API_KEY}
 
 BASE_URL = "https://opendata.aemet.es/opendata/api/valores/climatologicos/diarios/datos/fechaini/{}/fechafin/{}/todasestaciones"
