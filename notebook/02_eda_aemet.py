@@ -1,6 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: py:percent,ipynb
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -402,8 +403,8 @@ alt.Chart(heatmap_data).mark_rect().encode(
 heatmap_precip_mean = (df
     .group_by(["provincia", "mes"])
     .agg(pl.col("precipitacion").mean().alias("precip_mean"))
-    .with_columns(pl.col("mes").cast(pl.Enum(month_order)))
     .sort("mes")
+    .to_pandas()
 )
 
 alt.Chart(heatmap_precip_mean).mark_rect().encode(
@@ -430,8 +431,8 @@ alt.Chart(heatmap_precip_mean).mark_rect().encode(
 heatmap_viento_mean = (df
     .group_by(["provincia", "mes"])
     .agg(pl.col("velocidad_viento_media").mean().alias("viento_mean"))
-    .with_columns(pl.col("mes").cast(pl.Enum(month_order)))
     .sort("mes")
+    .to_pandas()
 )
 
 alt.Chart(heatmap_viento_mean).mark_rect().encode(
@@ -663,3 +664,15 @@ for var, label in variables.items():
     ax.set_ylim(35, 44)
     ax.set_axis_off()
     plt.show()
+
+# %%
+if __name__ == "__main__":
+    import jupytext as jpt
+    _py = Path(__file__)
+    _nb = _py.with_suffix(".ipynb")
+    if not _nb.exists():
+        jpt.write(jpt.read(_py), _nb, fmt="ipynb")
+        print(f"Created {_nb.name}")
+    else:
+        jpt.write(jpt.read(_py), _nb, fmt="ipynb")
+        print(f"Synced {_nb.name}")

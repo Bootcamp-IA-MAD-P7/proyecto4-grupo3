@@ -1,6 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: py:percent,ipynb
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -445,5 +446,17 @@ df[['mes', 'month_name']]
 
 # %%
 from pathlib import Path
-Path("../data/processed").mkdir(parents=True, exist_ok=True)
+Path("../data/cleaned").mkdir(parents=True, exist_ok=True)
 df.write_parquet("../data/cleaned/fires_clean.parquet")
+
+# %%
+if __name__ == "__main__":
+    import jupytext as jpt
+    _py = Path(__file__)
+    _nb = _py.with_suffix(".ipynb")
+    if not _nb.exists():
+        jpt.write(jpt.read(_py), _nb, fmt="ipynb")
+        print(f"Created {_nb.name}")
+    else:
+        jpt.write(jpt.read(_py), _nb, fmt="ipynb")
+        print(f"Synced {_nb.name}")
