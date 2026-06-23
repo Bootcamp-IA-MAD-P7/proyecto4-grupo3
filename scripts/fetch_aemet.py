@@ -1,4 +1,5 @@
 import os
+import sys
 import requests
 import pandas as pd
 import time
@@ -10,20 +11,20 @@ API_KEY = os.getenv("AEMET_API_KEY")
 if not API_KEY:
     raise ValueError("AEMET_API_KEY no encontrada en .env")
 
-YEAR = 2022
-START_DATE = datetime(YEAR, 1, 1)
-END_DATE = datetime(YEAR, 12, 31)
+if len(sys.argv) > 1:
+    YEARS = [int(sys.argv[1])]
+else:
+    YEARS = range(2013, 2023)
 
-OUTPUT_FILE = f"data/raw/aemet_{YEAR}.csv"
+OUTPUT_DIR = "data/raw"
 
-os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 HEADERS = {"api_key": API_KEY}
 
 BASE_URL = "https://opendata.aemet.es/opendata/api/valores/climatologicos/diarios/datos/fechaini/{}/fechafin/{}/todasestaciones"
 
-start_time = time.time()
-all_data = []
+total_start = time.time()
 
 
 def request_with_retry(url, max_retries=10):
@@ -33,11 +34,11 @@ def request_with_retry(url, max_retries=10):
         if r.status_code == 200:
             return r.json()
         if r.status_code == 429:
-            print(f"429 -> esperando {wait}s (reintento {i+1}/{max_retries})")
+            print(f"  429 -> esperando {wait}s (reintento {i+1}/{max_retries})")
             time.sleep(wait)
             wait *= 2
             continue
-        print(f"HTTP {r.status_code}: {r.text[:200]}")
+        print(f"  HTTP {r.status_code}: {r.text[:200]}")
         time.sleep(wait)
     raise Exception("Fallo tras múltiples reintentos")
 
@@ -67,36 +68,54 @@ def fetch_data(start, end):
     raise Exception("No se pudo obtener datos de la URL final")
 
 
-total_blocks = 0
-current = START_DATE
+for year in YEARS:
+    print(f"\n{'='*60}")
+    print(f"AÑO {year}")
+    print(f"{'='*60}")
 
-while current < END_DATE:
-    total_blocks += 1
-    next_date = min(current + timedelta(days=14), END_DATE)
+    year_start = time.time()
+    all_data = []
+    start_date = datetime(year, 1, 1)
+    end_date = datetime(year, 12, 31)
+    output_file = os.path.join(OUTPUT_DIR, f"aemet_{year}.csv")
 
-    print(f"\nBloque {total_blocks}: {current.date()} -> {next_date.date()}")
+    total_blocks = 0
+    current = start_date
 
-    try:
-        df = fetch_data(current, next_date)
-        all_data.append(df)
+    while current < end_date:
+        total_blocks += 1
+        next_date = min(current + timedelta(days=14), end_date)
 
-        df_total = pd.concat(all_data, ignore_index=True)
-        df_total.to_csv(OUTPUT_FILE, index=False)
+        print(f"\nBloque {total_blocks}: {current.date()} -> {next_date.date()}")
 
-        elapsed = time.time() - start_time
-        print(f"OK -> filas totales: {len(df_total)} | {elapsed/60:.2f} min")
+        try:
+            df = fetch_data(current, next_date)
+            all_data.append(df)
 
-        time.sleep(1.5)
+            df_total = pd.concat(all_data, ignore_index=True)
+            df_total.to_csv(output_file, index=False)
 
-    except Exception as e:
-        print(f"ERROR: {e}")
-        raise
+            elapsed = time.time() - year_start
+            print(f"OK -> filas: {len(df_total)} | {elapsed/60:.2f} min año")
 
-    current = next_date + timedelta(days=1)
+            time.sleep(1.5)
 
-df_final = pd.concat(all_data, ignore_index=True)
-df_final.to_csv(OUTPUT_FILE, index=False)
+        except Exception as e:
+            print(f"ERROR: {e}")
+            raise
 
-print(f"\nDescarga completa. Total filas: {len(df_final)}")
-print(f"Tiempo total: {(time.time()-start_time)/60:.2f} min")
-print(f"Provincias: {sorted(df_final['provincia'].unique())}")
+        current = next_date + timedelta(days=1)
+
+    df_final = pd.concat(all_data, ignore_index=True)
+    df_final.to_csv(output_file, index=False)
+
+    year_elapsed = time.time() - year_start
+    total_elapsed = time.time() - total_start
+    print(f"\nAño {year} completado. Filas: {len(df_final)} | Tiempo: {year_elapsed/60:.2f} min")
+    print(f"Tiempo total transcurrido: {total_elapsed/60:.2f} min")
+    print(f"Provincias: {sorted(df_final['provincia'].unique())}")
+
+print(f"\n{'='*60}")
+print(f"DESCARGA COMPLETA (2013-2022)")
+print(f"{'='*60}")
+print(f"Tiempo total: {(time.time()-total_start)/60:.2f} min")
