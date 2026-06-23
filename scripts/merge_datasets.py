@@ -16,9 +16,10 @@ from pathlib import Path
 
 RAW = Path("data/raw")
 PROCESSED = Path("data/processed")
+CLEANED = Path("data/cleaned")
 
 AEMET_PATTERN = "aemet_{}.csv"
-FIRES_PATH = PROCESSED / "fires-all-prepro.parquet"
+FIRES_PATH = CLEANED / "fires_clean.parquet"
 OUTPUT_PATH = PROCESSED / "fires_weather_merged.parquet"
 
 COLUMNS_KEEP = [
