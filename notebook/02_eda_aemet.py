@@ -215,26 +215,11 @@ df = df.with_columns(
 )
 print(df["velocidad_viento_media"].median())
 
-# %%
-df = df.with_columns(
-    pl.col("racha_maxima_viento").str.replace(",", ".").cast(pl.Float64)
-)
-
-# %%
-df = df.with_columns(
-    pl.col("racha_maxima_viento").fill_null(pl.col("racha_maxima_viento").median())
-)
-print(df["racha_maxima_viento"].median())
-
 # %% [markdown]
 # ### 4.6 Temperature cleaning
 
 # %%
-df = df.with_columns(
-    pl.col("temperatura_media", "temperatura_minima", "temperatura_maxima")
-    .str.replace(",", ".")
-    .cast(pl.Float64)
-)
+df = df.with_columns(pl.col("temperatura_media").str.replace(",", ".").cast(pl.Float64))
 
 # %%
 df = df.with_columns(pl.col("precipitacion"))
@@ -574,13 +559,8 @@ alt.Chart(scatter_viento).mark_circle(size=60, opacity=0.7).encode(
 num_cols = [
     "temperatura_media",
     "precipitacion",
-    "temperatura_minima",
-    "temperatura_maxima",
     "humedad_relativa_media",
-    "humedad_relativa_maxima",
-    "humedad_relativa_minima",
     "velocidad_viento_media",
-    "racha_maxima_viento",
 ]
 
 corr_df = df_pd[num_cols].corr().reset_index()
@@ -651,14 +631,14 @@ variables = {
     "temperatura_media": "Average Temperature (°C)",
     "precipitacion": "Total Precipitation (mm)",
     "humedad_relativa_media": "Average Relative Humidity (%)",
-    "racha_maxima_viento": "Max Wind Gust (km/h)",
+    "velocidad_viento_media": "Average Wind Speed (km/h)",
 }
 
 agg_funcs = {
     "temperatura_media": "mean",
     "precipitacion": "sum",
     "humedad_relativa_media": "mean",
-    "racha_maxima_viento": "mean",
+    "velocidad_viento_media": "mean",
 }
 
 for var, label in variables.items():
