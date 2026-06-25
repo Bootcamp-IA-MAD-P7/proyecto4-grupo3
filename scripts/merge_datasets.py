@@ -23,56 +23,100 @@ FIRES_PATH = CLEANED / "fires_clean.parquet"
 OUTPUT_PATH = PROCESSED / "fires_weather_merged.parquet"
 
 COLUMNS_KEEP = [
-    "temperatura_media", "precipitacion", "temperatura_minima",
-    "temperatura_maxima", "humedad_relativa_media",
-    "humedad_relativa_maxima", "humedad_relativa_minima",
-    "velocidad_viento_media", "racha_maxima_viento",
+    "temperatura_media",
+    "precipitacion",
+    "humedad_relativa_media",
+    "velocidad_viento_media",
 ]
 
 provincia_to_ccaa = {
-    "ALMERIA": "ANDALUCIA", "CADIZ": "ANDALUCIA",
-    "CORDOBA": "ANDALUCIA", "GRANADA": "ANDALUCIA",
-    "HUELVA": "ANDALUCIA", "JAEN": "ANDALUCIA",
-    "MALAGA": "ANDALUCIA", "SEVILLA": "ANDALUCIA",
-    "HUESCA": "ARAGON", "TERUEL": "ARAGON", "ZARAGOZA": "ARAGON",
+    "ALMERIA": "ANDALUCIA",
+    "CADIZ": "ANDALUCIA",
+    "CORDOBA": "ANDALUCIA",
+    "GRANADA": "ANDALUCIA",
+    "HUELVA": "ANDALUCIA",
+    "JAEN": "ANDALUCIA",
+    "MALAGA": "ANDALUCIA",
+    "SEVILLA": "ANDALUCIA",
+    "HUESCA": "ARAGON",
+    "TERUEL": "ARAGON",
+    "ZARAGOZA": "ARAGON",
     "ASTURIAS": "ASTURIAS",
-    "BALEARES": "BALEARES", "ILLES BALEARS": "BALEARES",
+    "BALEARES": "BALEARES",
+    "ILLES BALEARS": "BALEARES",
     "LAS PALMAS": "CANARIAS",
     "STA. CRUZ DE TENERIFE": "CANARIAS",
     "SANTA CRUZ DE TENERIFE": "CANARIAS",
-    "CANTABRIA": "CANTABRIA", "SANTANDER": "CANTABRIA",
+    "CANTABRIA": "CANTABRIA",
+    "SANTANDER": "CANTABRIA",
     "ALBACETE": "CASTILLA-LA MANCHA",
     "CIUDAD REAL": "CASTILLA-LA MANCHA",
     "CUENCA": "CASTILLA-LA MANCHA",
     "GUADALAJARA": "CASTILLA-LA MANCHA",
     "TOLEDO": "CASTILLA-LA MANCHA",
-    "AVILA": "CASTILLA Y LEON", "BURGOS": "CASTILLA Y LEON",
-    "LEON": "CASTILLA Y LEON", "PALENCIA": "CASTILLA Y LEON",
-    "SALAMANCA": "CASTILLA Y LEON", "SEGOVIA": "CASTILLA Y LEON",
-    "SORIA": "CASTILLA Y LEON", "VALLADOLID": "CASTILLA Y LEON",
+    "AVILA": "CASTILLA Y LEON",
+    "BURGOS": "CASTILLA Y LEON",
+    "LEON": "CASTILLA Y LEON",
+    "PALENCIA": "CASTILLA Y LEON",
+    "SALAMANCA": "CASTILLA Y LEON",
+    "SEGOVIA": "CASTILLA Y LEON",
+    "SORIA": "CASTILLA Y LEON",
+    "VALLADOLID": "CASTILLA Y LEON",
     "ZAMORA": "CASTILLA Y LEON",
-    "BARCELONA": "CATALUNA", "GIRONA": "CATALUNA",
-    "LLEIDA": "CATALUNA", "TARRAGONA": "CATALUNA",
-    "BADAJOZ": "EXTREMADURA", "CACERES": "EXTREMADURA",
-    "A CORUÑA": "GALICIA", "LUGO": "GALICIA",
-    "OURENSE": "GALICIA", "PONTEVEDRA": "GALICIA",
-    "LA RIOJA": "LA RIOJA", "MADRID": "MADRID",
-    "MURCIA": "MURCIA", "NAVARRA": "NAVARRA",
-    "ALAVA": "PAIS VASCO", "ARABA/ALAVA": "PAIS VASCO",
-    "GUIPUZCOA": "PAIS VASCO", "GIPUZKOA": "PAIS VASCO",
-    "BIZKAIA": "PAIS VASCO", "VIZCAYA": "PAIS VASCO",
-    "ALICANTE": "VALENCIA", "CASTELLON": "VALENCIA",
-    "VALENCIA": "VALENCIA", "CEUTA": "CEUTA", "MELILLA": "MELILLA",
+    "BARCELONA": "CATALUNA",
+    "GIRONA": "CATALUNA",
+    "LLEIDA": "CATALUNA",
+    "TARRAGONA": "CATALUNA",
+    "BADAJOZ": "EXTREMADURA",
+    "CACERES": "EXTREMADURA",
+    "A CORUÑA": "GALICIA",
+    "LUGO": "GALICIA",
+    "OURENSE": "GALICIA",
+    "PONTEVEDRA": "GALICIA",
+    "LA RIOJA": "LA RIOJA",
+    "MADRID": "MADRID",
+    "MURCIA": "MURCIA",
+    "NAVARRA": "NAVARRA",
+    "ALAVA": "PAIS VASCO",
+    "ARABA/ALAVA": "PAIS VASCO",
+    "GUIPUZCOA": "PAIS VASCO",
+    "GIPUZKOA": "PAIS VASCO",
+    "BIZKAIA": "PAIS VASCO",
+    "VIZCAYA": "PAIS VASCO",
+    "ALICANTE": "VALENCIA",
+    "CASTELLON": "VALENCIA",
+    "VALENCIA": "VALENCIA",
+    "CEUTA": "CEUTA",
+    "MELILLA": "MELILLA",
 }
 
 
 def clean_aemet(df: pl.DataFrame) -> pl.DataFrame:
     """Standardise and clean a single AEMET yearly DataFrame."""
-    df = df.drop([
-        "indicativo", "nombre", "horatmin", "horatmax", "horaHrMin",
-        "dir", "horaracha", "horaPresMax", "horaPresMin", "sol",
-        "horaHrMax", "presMax", "presMin",
-    ])
+    df = df.drop(
+        [
+            "indicativo",
+            "nombre",
+            "horatmin",
+            "horatmax",
+            "horaHrMin",
+            "dir",
+            "horaracha",
+            "horaPresMax",
+            "horaPresMin",
+            "sol",
+            "horaHrMax",
+            "presMax",
+            "presMin",
+            "tmin",
+            "tmax",
+            "hrMax",
+            "hrMin",
+            "presMax",
+            "presMin",
+            "racha",
+        ]
+    )
 
     df = df.with_columns(
         pl.col("provincia")
@@ -82,35 +126,34 @@ def clean_aemet(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     # Rename
-    df = df.rename({
-        "tmed": "temperatura_media",
-        "prec": "precipitacion",
-        "tmin": "temperatura_minima",
-        "tmax": "temperatura_maxima",
-        "hrMedia": "humedad_relativa_media",
-        "hrMax": "humedad_relativa_maxima",
-        "hrMin": "humedad_relativa_minima",
-        "velmedia": "velocidad_viento_media",
-        "racha": "racha_maxima_viento",
-    })
+    df = df.rename(
+        {
+            "tmed": "temperatura_media",
+            "prec": "precipitacion",
+            "hrMedia": "humedad_relativa_media",
+            "velmedia": "velocidad_viento_media",
+        }
+    )
 
     # Filter out non-numeric markers in precipitation
     df = df.filter(~pl.col("precipitacion").is_in(["Ip", "Acum"]))
 
     # Convert comma decimals → float for weather cols
-    for col in ["temperatura_media", "temperatura_minima",
-                "temperatura_maxima", "precipitacion",
-                "velocidad_viento_media", "racha_maxima_viento"]:
-        df = df.with_columns(
-            pl.col(col).str.replace(",", ".").cast(pl.Float64)
-        )
+    for col in [
+        "temperatura_media",
+        "precipitacion",
+        "velocidad_viento_media",
+    ]:
+        df = df.with_columns(pl.col(col).str.replace(",", ".").cast(pl.Float64))
 
     # Parse date
     df = df.with_columns(pl.col("fecha").str.to_date("%Y-%m-%d"))
 
     # Drop nulls in core weather columns
-    core = ["temperatura_media", "precipitacion", "temperatura_minima",
-            "temperatura_maxima"]
+    core = [
+        "temperatura_media",
+        "precipitacion",
+    ]
     df = df.drop_nulls(subset=core)
 
     return df
