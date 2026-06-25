@@ -1,8 +1,14 @@
 import polars as pl
 import numpy as np
 from src.config import (
-    DATA_PROCESSED, TARGET, NUM_COLS, CAT_OHE,
-    CAT_TARGET_ENCODE, GEO_COLS, CYCLIC_COLS, DROP_COLS,
+    DATA_PROCESSED,
+    TARGET,
+    NUM_COLS,
+    CAT_OHE,
+    CAT_TARGET_ENCODE,
+    GEO_COLS,
+    CYCLIC_COLS,
+    DROP_COLS,
 )
 
 
@@ -20,18 +26,22 @@ def get_year_column(df: pl.DataFrame) -> str:
 
 def compute_nulls(df: pl.DataFrame) -> pl.DataFrame:
     total = df.height
-    return df.select([
-        pl.col(c).is_null().sum().alias(c)
-        for c in df.columns
-    ]).melt(value_name="null_count").with_columns([
-        (pl.col("null_count") / total * 100).alias("null_pct"),
-    ])
+    return (
+        df.select([pl.col(c).is_null().sum().alias(c) for c in df.columns])
+        .melt(value_name="null_count")
+        .with_columns(
+            [
+                (pl.col("null_count") / total * 100).alias("null_pct"),
+            ]
+        )
+    )
 
 
 def compute_cardinality(df: pl.DataFrame) -> dict:
     return {
         c: df[c].n_unique()
-        for c in df.columns if df[c].dtype in (pl.String, pl.Utf8, pl.Int64, pl.Int32)
+        for c in df.columns
+        if df[c].dtype in (pl.String, pl.Utf8, pl.Int64, pl.Int32)
     }
 
 
@@ -54,9 +64,11 @@ def compute_target_stats(df: pl.DataFrame) -> dict:
 
 
 def compute_correlations(df: pl.DataFrame) -> list[dict]:
-    numeric = [c for c, d in df.schema.items()
-               if d in (pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.Int8)
-               and c != "id"]
+    numeric = [
+        c
+        for c, d in df.schema.items()
+        if d in (pl.Float64, pl.Float32, pl.Int64, pl.Int32, pl.Int8) and c != "id"
+    ]
     results = []
     for col in numeric:
         corr = df.select(pl.corr(col, TARGET)).item()
@@ -66,107 +78,93 @@ def compute_correlations(df: pl.DataFrame) -> list[dict]:
 
 
 def compute_group_stats(df: pl.DataFrame, group_col: str) -> pl.DataFrame:
-    return df.group_by(group_col).agg([
-        pl.len().alias("count"),
-        pl.col(TARGET).mean().alias(f"mean_{TARGET}"),
-        pl.col(TARGET).std().alias(f"std_{TARGET}"),
-        pl.col(TARGET).median().alias(f"median_{TARGET}"),
-    ]).sort("count", descending=True)
+    return (
+        df.group_by(group_col)
+        .agg(
+            [
+                pl.len().alias("count"),
+                pl.col(TARGET).mean().alias(f"mean_{TARGET}"),
+                pl.col(TARGET).std().alias(f"std_{TARGET}"),
+                pl.col(TARGET).median().alias(f"median_{TARGET}"),
+            ]
+        )
+        .sort("count", descending=True)
+    )
 
 
 def check_data_quality(df: pl.DataFrame) -> list[dict]:
     issues = []
 
     if df["fecha"].equals(df["fecha_incendio"]):
-        issues.append({
-            "type": "redundancy",
-            "severity": "high",
-            "detail": "fecha and fecha_incendio are identical (columnas duplicadas)",
-            "action": "Eliminar fecha o fecha_incendio",
-        })
+        issues.append(
+            {
+                "type": "redundancy",
+                "severity": "high",
+                "detail": "fecha and fecha_incendio are identical (columnas duplicadas)",
+                "action": "Eliminar fecha o fecha_incendio",
+            }
+        )
 
     if df["id"].n_unique() == df.height:
-        issues.append({
-            "type": "identifier",
-            "severity": "high",
-            "detail": "id is a unique row identifier (no aporta valor predictivo)",
-            "action": "Eliminar columna id",
-        })
+        issues.append(
+            {
+                "type": "identifier",
+                "severity": "high",
+                "detail": "id is a unique row identifier (no aporta valor predictivo)",
+                "action": "Eliminar columna id",
+            }
+        )
 
     for col in ["latitud", "longitud"]:
         if df[col].dtype == pl.String:
             sample = df[col].head(5).to_list()
-            issues.append({
-                "type": "wrong_dtype",
-                "severity": "medium",
-                "detail": f"{col} es String, debería ser Float. Sample: {sample}",
-                "action": "Convertir a Float64",
-            })
+            issues.append(
+                {
+                    "type": "wrong_dtype",
+                    "severity": "medium",
+                    "detail": f"{col} es String, debería ser Float. Sample: {sample}",
+                    "action": "Convertir a Float64",
+                }
+            )
 
     target = df[TARGET]
     skew = target.skew()
     if abs(skew) > 1:
-        issues.append({
-            "type": "high_skew",
-            "severity": "high",
-            "detail": f"superficie_quemada tiene skewness={skew:.2f} (extremadamente asimétrica)",
-            "action": "Aplicar transformación log1p",
-        })
+        issues.append(
+            {
+                "type": "high_skew",
+                "severity": "high",
+                "detail": f"superficie_quemada tiene skewness={skew:.2f} (extremadamente asimétrica)",
+                "action": "Aplicar transformación log1p",
+            }
+        )
 
-    issues.append({
-        "type": "correlation_note",
-        "severity": "info",
-        "detail": "Todas las correlaciones con el target son muy bajas (<0.07). "
-                   "La superficie quemada puede ser difícil de predecir solo con datos meteorológicos.",
-        "action": "Documentar limitación en el informe",
-    })
+    issues.append(
+        {
+            "type": "correlation_note",
+            "severity": "info",
+            "detail": "Todas las correlaciones con el target son muy bajas (<0.07). "
+            "La superficie quemada puede ser difícil de predecir solo con datos meteorológicos.",
+            "action": "Documentar limitación en el informe",
+        }
+    )
 
     return issues
 
 
 def check_weather_coherence(df: pl.DataFrame) -> list[dict]:
     issues = []
-    temp_min_issues = df.filter(
-        pl.col("temperatura_minima") > pl.col("temperatura_maxima")
-    ).height
-    if temp_min_issues > 0:
-        issues.append({
-            "type": "incoherent_data",
-            "severity": "medium",
-            "detail": f"{temp_min_issues} filas con temperatura_minima > temperatura_maxima",
-            "action": "Revisar calidad de datos de temperatura",
-        })
-
-    hum_issues = df.filter(
-        (pl.col("humedad_relativa_minima") > pl.col("humedad_relativa_maxima"))
-    ).height
-    if hum_issues > 0:
-        issues.append({
-            "type": "incoherent_data",
-            "severity": "medium",
-            "detail": f"{hum_issues} filas con humedad_minima > humedad_maxima",
-            "action": "Revisar calidad de datos de humedad",
-        })
-
-    temp_range = df.filter(
-        (pl.col("temperatura_maxima") - pl.col("temperatura_minima")) > 40
-    ).height
-    if temp_range > 0:
-        issues.append({
-            "type": "suspicious_range",
-            "severity": "low",
-            "detail": f"{temp_range} filas con rango térmico > 40°C (posibles errores de medición)",
-            "action": "Verificar outliers de temperatura",
-        })
 
     neg_precip = df.filter(pl.col("precipitacion") < 0).height
     if neg_precip > 0:
-        issues.append({
-            "type": "negative_values",
-            "severity": "high",
-            "detail": f"{neg_precip} filas con precipitación negativa",
-            "action": "Revisar calidad de datos de precipitación",
-        })
+        issues.append(
+            {
+                "type": "negative_values",
+                "severity": "high",
+                "detail": f"{neg_precip} filas con precipitación negativa",
+                "action": "Revisar calidad de datos de precipitación",
+            }
+        )
 
     return issues
 

@@ -1,5 +1,9 @@
 import numpy as np
 import pandas as pd
+import matplotlib
+
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -19,8 +23,15 @@ def plot_target_distribution(y: np.ndarray, log_transform: bool = False):
     label = "log1p(superficie_quemada)" if log_transform else "superficie_quemada (ha)"
 
     axes[0].hist(data, bins=80, color="steelblue", edgecolor="white", alpha=0.8)
-    axes[0].axvline(np.mean(data), color="red", linestyle="--", label=f"Media: {np.mean(data):.2f}")
-    axes[0].axvline(np.median(data), color="green", linestyle="--", label=f"Mediana: {np.median(data):.2f}")
+    axes[0].axvline(
+        np.mean(data), color="red", linestyle="--", label=f"Media: {np.mean(data):.2f}"
+    )
+    axes[0].axvline(
+        np.median(data),
+        color="green",
+        linestyle="--",
+        label=f"Mediana: {np.median(data):.2f}",
+    )
     axes[0].set_xlabel(label)
     axes[0].set_ylabel("Frecuencia")
     axes[0].set_title(f"Distribución de {label}")
@@ -47,18 +58,24 @@ def plot_correlation_heatmap(df: pd.DataFrame):
     mask = np.triu(np.ones_like(corr, dtype=bool), k=1)
     fig, ax = plt.subplots(figsize=(14, 12))
     sns.heatmap(
-        corr, mask=mask, annot=True, fmt=".2f", cmap="RdBu_r",
-        center=0, vmin=-1, vmax=1, square=True,
-        linewidths=0.5, ax=ax,
+        corr,
+        mask=mask,
+        annot=True,
+        fmt=".2f",
+        cmap="RdBu_r",
+        center=0,
+        vmin=-1,
+        vmax=1,
+        square=True,
+        linewidths=0.5,
+        ax=ax,
     )
     ax.set_title("Mapa de Correlaciones", fontsize=14)
     plt.tight_layout()
     _save("correlation_heatmap.png")
 
 
-def plot_scatter_target_vs_features(
-    X: pd.DataFrame, y: np.ndarray, top_n: int = 6
-):
+def plot_scatter_target_vs_features(X: pd.DataFrame, y: np.ndarray, top_n: int = 6):
     numeric = X.select_dtypes(include=[np.number]).columns.tolist()
     if len(numeric) > top_n:
         corrs = X[numeric].apply(lambda col: abs(col.corr(pd.Series(y, index=X.index))))
@@ -91,7 +108,7 @@ def plot_prediction_vs_actual(y_true: np.ndarray, y_pred: np.ndarray, title: str
     ax.plot([min_val, max_val], [min_val, max_val], "r--", linewidth=2, label="Ideal")
     ax.set_xlabel("Valor Real")
     ax.set_ylabel("Predicción")
-    ax.set_title(f"Predicción vs Valor Real{ ' - ' + title if title else ''}")
+    ax.set_title(f"Predicción vs Valor Real{' - ' + title if title else ''}")
     ax.legend()
     ax.grid(alpha=0.3)
     plt.tight_layout()
@@ -106,7 +123,7 @@ def plot_residuals(y_true: np.ndarray, y_pred: np.ndarray, title: str = ""):
     axes[0].axvline(0, color="red", linestyle="--", linewidth=2)
     axes[0].set_xlabel("Residuo (Real - Predicción)")
     axes[0].set_ylabel("Frecuencia")
-    axes[0].set_title(f"Histograma de Residuos{ ' - ' + title if title else ''}")
+    axes[0].set_title(f"Histograma de Residuos{' - ' + title if title else ''}")
     axes[0].grid(alpha=0.3)
 
     axes[1].scatter(y_pred, residuals, alpha=0.3, s=10, c="steelblue")
@@ -140,7 +157,7 @@ def plot_feature_importance(
     ax.set_yticks(range(n_features))
     ax.set_yticklabels([feature_names[i] for i in indices])
     ax.set_xlabel("Importancia")
-    ax.set_title(f"Feature Importance{ ' - ' + title if title else ''}")
+    ax.set_title(f"Feature Importance{' - ' + title if title else ''}")
     ax.grid(alpha=0.3, axis="x")
     plt.tight_layout()
     _save(f"feature_importance_{title.replace(' ', '_') if title else 'all'}.png")
@@ -201,7 +218,13 @@ def plot_overfitting_comparison(results: dict[str, dict]):
     width = 0.35
 
     bars1 = ax.bar(x - width / 2, test_r2_values, width, label="R² Test", alpha=0.8)
-    bars2 = ax.bar(x + width / 2, overfitting_values, width, label="Overfitting (R² diff)", alpha=0.8)
+    bars2 = ax.bar(
+        x + width / 2,
+        overfitting_values,
+        width,
+        label="Overfitting (R² diff)",
+        alpha=0.8,
+    )
 
     ax.set_xticks(x)
     ax.set_xticklabels(names, rotation=45, ha="right")
@@ -211,11 +234,23 @@ def plot_overfitting_comparison(results: dict[str, dict]):
     ax.grid(alpha=0.3, axis="y")
 
     for bar, val in zip(bars1, test_r2_values):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
-                f"{val:.3f}", ha="center", va="bottom", fontsize=9)
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.01,
+            f"{val:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
     for bar, val in zip(bars2, overfitting_values):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.01,
-                f"{val:.3f}", ha="center", va="bottom", fontsize=9)
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + 0.01,
+            f"{val:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
 
     plt.tight_layout()
     _save("overfitting_comparison.png")
@@ -234,8 +269,14 @@ def plot_cv_results(cv_results: dict[str, dict]):
     ax.grid(alpha=0.3, axis="y")
 
     for i, (mean, std) in enumerate(zip(r2_means, r2_stds)):
-        ax.text(i, mean + std + 0.01, f"{mean:.3f}±{std:.3f}",
-                ha="center", va="bottom", fontsize=9)
+        ax.text(
+            i,
+            mean + std + 0.01,
+            f"{mean:.3f}±{std:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
 
     plt.tight_layout()
     _save("cv_results.png")

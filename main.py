@@ -12,8 +12,16 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
 
 from src.config import DATA_PROCESSED, TARGET, RANDOM_STATE
-from preprocessing.analysis import load_dataset, generate_exploratory_report, print_report
-from preprocessing.preprocessor import build_preprocessor, prepare_data, preprocess_dataframe
+from preprocessing.analysis import (
+    load_dataset,
+    generate_exploratory_report,
+    print_report,
+)
+from preprocessing.preprocessor import (
+    build_preprocessor,
+    prepare_data,
+    preprocess_dataframe,
+)
 from training.trainer import (
     split_data,
     train_linear_regression,
@@ -107,10 +115,13 @@ def main():
     # --- LinearRegression
     print("\n  --- LinearRegression (baseline) ---")
     lr_pipeline, lr_time = train_linear_regression(X_train, y_train, year_col=year_col)
-    lr_eval = evaluate_model(lr_pipeline, X_train, y_train, X_test, y_test,
-                              use_log1p=use_log1p)
+    lr_eval = evaluate_model(
+        lr_pipeline, X_train, y_train, X_test, y_test, use_log1p=use_log1p
+    )
     model_results["LinearRegression"] = lr_eval
-    print(f"    R2 test: {lr_eval['test']['R2']:.4f} | Overfitting: {lr_eval['overfitting']:.4f} | Tiempo: {lr_time:.2f}s")
+    print(
+        f"    R2 test: {lr_eval['test']['R2']:.4f} | Overfitting: {lr_eval['overfitting']:.4f} | Tiempo: {lr_time:.2f}s"
+    )
     save_model(lr_pipeline, "linear_regression")
 
     def make_lr():
@@ -124,35 +135,70 @@ def main():
     # --- RandomForest
     print("\n  --- RandomForestRegressor ---")
     rf_pipeline, rf_time = train_random_forest(X_train, y_train, year_col=year_col)
-    rf_eval = evaluate_model(rf_pipeline, X_train, y_train, X_test, y_test,
-                              use_log1p=use_log1p)
+    rf_eval = evaluate_model(
+        rf_pipeline, X_train, y_train, X_test, y_test, use_log1p=use_log1p
+    )
     model_results["RandomForest"] = rf_eval
-    print(f"    R2 test: {rf_eval['test']['R2']:.4f} | Overfitting: {rf_eval['overfitting']:.4f} | Tiempo: {rf_time:.2f}s")
+    print(
+        f"    R2 test: {rf_eval['test']['R2']:.4f} | Overfitting: {rf_eval['overfitting']:.4f} | Tiempo: {rf_time:.2f}s"
+    )
     save_model(rf_pipeline, "random_forest")
 
     def make_rf():
         p = build_preprocessor(year_col=year_col)
-        return Pipeline([("preprocessor", p), ("model", RandomForestRegressor(
-            n_estimators=200, max_depth=15, min_samples_split=5, min_samples_leaf=2,
-            random_state=RANDOM_STATE, n_jobs=-1))])
+        return Pipeline(
+            [
+                ("preprocessor", p),
+                (
+                    "model",
+                    RandomForestRegressor(
+                        n_estimators=200,
+                        max_depth=15,
+                        min_samples_split=5,
+                        min_samples_leaf=2,
+                        random_state=RANDOM_STATE,
+                        n_jobs=-1,
+                    ),
+                ),
+            ]
+        )
+
     rf_cv = cross_validate_model(make_rf, X_train, y_train, target_is_log1p=use_log1p)
     cv_results["RandomForest"] = rf_cv
     print(f"    CV R2: {rf_cv['R2_mean']:.4f} +/- {rf_cv['R2_std']:.4f}")
 
     # --- HistGradientBoosting
     print("\n  --- HistGradientBoostingRegressor ---")
-    hgb_pipeline, hgb_time = train_hist_gradient_boosting(X_train, y_train, year_col=year_col)
-    hgb_eval = evaluate_model(hgb_pipeline, X_train, y_train, X_test, y_test,
-                               use_log1p=use_log1p)
+    hgb_pipeline, hgb_time = train_hist_gradient_boosting(
+        X_train, y_train, year_col=year_col
+    )
+    hgb_eval = evaluate_model(
+        hgb_pipeline, X_train, y_train, X_test, y_test, use_log1p=use_log1p
+    )
     model_results["HistGB"] = hgb_eval
-    print(f"    R2 test: {hgb_eval['test']['R2']:.4f} | Overfitting: {hgb_eval['overfitting']:.4f} | Tiempo: {hgb_time:.2f}s")
+    print(
+        f"    R2 test: {hgb_eval['test']['R2']:.4f} | Overfitting: {hgb_eval['overfitting']:.4f} | Tiempo: {hgb_time:.2f}s"
+    )
     save_model(hgb_pipeline, "hist_gradient_boosting")
 
     def make_hgb():
         p = build_preprocessor(year_col=year_col)
-        return Pipeline([("preprocessor", p), ("model", HistGradientBoostingRegressor(
-            max_iter=200, max_depth=5, learning_rate=0.1, min_samples_leaf=20,
-            random_state=RANDOM_STATE))])
+        return Pipeline(
+            [
+                ("preprocessor", p),
+                (
+                    "model",
+                    HistGradientBoostingRegressor(
+                        max_iter=200,
+                        max_depth=5,
+                        learning_rate=0.1,
+                        min_samples_leaf=20,
+                        random_state=RANDOM_STATE,
+                    ),
+                ),
+            ]
+        )
+
     hgb_cv = cross_validate_model(make_hgb, X_train, y_train, target_is_log1p=use_log1p)
     cv_results["HistGB"] = hgb_cv
     print(f"    CV R2: {hgb_cv['R2_mean']:.4f} +/- {hgb_cv['R2_std']:.4f}")
@@ -189,11 +235,13 @@ def main():
     print("\n[9/10] Generando graficos de diagnostico...")
     best_eval = model_results[best_model_name]
     plot_prediction_vs_actual(
-        best_eval["y_true_test"], best_eval["y_pred_test"],
+        best_eval["y_true_test"],
+        best_eval["y_pred_test"],
         title=best_model_name,
     )
     plot_residuals(
-        best_eval["y_true_test"], best_eval["y_pred_test"],
+        best_eval["y_true_test"],
+        best_eval["y_pred_test"],
         title=best_model_name,
     )
     print("  Graficos de diagnostico guardados en figures/")
@@ -207,7 +255,11 @@ def main():
                 X_train, y_train, n_iter=10, year_col=year_col
             )
             opt_eval = evaluate_model(
-                opt_pipeline, X_train, y_train, X_test, y_test,
+                opt_pipeline,
+                X_train,
+                y_train,
+                X_test,
+                y_test,
                 use_log1p=use_log1p,
             )
             model_results["RandomForest_Optimized"] = opt_eval
@@ -226,7 +278,11 @@ def main():
                 X_train, y_train, n_iter=10, year_col=year_col
             )
             opt_eval = evaluate_model(
-                opt_pipeline, X_train, y_train, X_test, y_test,
+                opt_pipeline,
+                X_train,
+                y_train,
+                X_test,
+                y_test,
                 use_log1p=use_log1p,
             )
             model_results["HistGB_Optimized"] = opt_eval
@@ -245,11 +301,13 @@ def main():
             print(f"  R2 test (optimizado): {optimization_results['test_r2']:.4f}")
             print(f"  Mejores parametros: {optimization_results['best_params']}")
             plot_prediction_vs_actual(
-                opt_eval["y_true_test"], opt_eval["y_pred_test"],
+                opt_eval["y_true_test"],
+                opt_eval["y_pred_test"],
                 title=f"{best_model_name}_Optimized",
             )
             plot_residuals(
-                opt_eval["y_true_test"], opt_eval["y_pred_test"],
+                opt_eval["y_true_test"],
+                opt_eval["y_pred_test"],
                 title=f"{best_model_name}_Optimized",
             )
     except Exception as e:
@@ -257,7 +315,10 @@ def main():
 
     # Informe final
     final_report = generate_final_report(
-        model_results, cv_results, best_model_name, optimization_results,
+        model_results,
+        cv_results,
+        best_model_name,
+        optimization_results,
     )
     save_report(final_report, "informe_final_rendimiento")
     print("\n  Informe final guardado en reports/informe_final_rendimiento.md")

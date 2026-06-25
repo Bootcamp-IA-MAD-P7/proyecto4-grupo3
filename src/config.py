@@ -16,13 +16,8 @@ NUM_COLS = [
     "altitud",
     "temperatura_media",
     "precipitacion",
-    "temperatura_minima",
-    "temperatura_maxima",
     "humedad_relativa_media",
-    "humedad_relativa_maxima",
-    "humedad_relativa_minima",
     "velocidad_viento_media",
-    "racha_maxima_viento",
 ]
 
 CAT_TARGET_ENCODE = ["provincia", "cc_aa"]

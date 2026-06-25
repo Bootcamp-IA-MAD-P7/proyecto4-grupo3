@@ -16,21 +16,23 @@ def _get_model_step(pipeline: Pipeline):
 
 
 def optimize_random_forest(
-    X_train: pd.DataFrame, y_train: pd.Series,
-    n_iter: int = 30, cv: int = CV_FOLDS,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    n_iter: int = 30,
+    cv: int = CV_FOLDS,
     year_col: str = "a\xf1o",
 ) -> tuple[Pipeline, dict, float]:
     base_pipeline = build_preprocessor(year_col=year_col)
     model = RandomForestRegressor(random_state=RANDOM_STATE, n_jobs=-1)
 
-    full_pipeline = Pipeline([
-        ("preprocessor", base_pipeline),
-        ("model", model),
-    ])
+    full_pipeline = Pipeline(
+        [
+            ("preprocessor", base_pipeline),
+            ("model", model),
+        ]
+    )
 
-    param_distributions = {
-        "model__" + k: v for k, v in RF_PARAMS.items()
-    }
+    param_distributions = {"model__" + k: v for k, v in RF_PARAMS.items()}
 
     search = RandomizedSearchCV(
         full_pipeline,
@@ -51,21 +53,23 @@ def optimize_random_forest(
 
 
 def optimize_hist_gradient_boosting(
-    X_train: pd.DataFrame, y_train: pd.Series,
-    n_iter: int = 30, cv: int = CV_FOLDS,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    n_iter: int = 30,
+    cv: int = CV_FOLDS,
     year_col: str = "a\xf1o",
 ) -> tuple[Pipeline, dict, float]:
     base_pipeline = build_preprocessor(year_col=year_col)
     model = HistGradientBoostingRegressor(random_state=RANDOM_STATE)
 
-    full_pipeline = Pipeline([
-        ("preprocessor", base_pipeline),
-        ("model", model),
-    ])
+    full_pipeline = Pipeline(
+        [
+            ("preprocessor", base_pipeline),
+            ("model", model),
+        ]
+    )
 
-    param_distributions = {
-        "model__" + k: v for k, v in HGB_PARAMS.items()
-    }
+    param_distributions = {"model__" + k: v for k, v in HGB_PARAMS.items()}
 
     search = RandomizedSearchCV(
         full_pipeline,

@@ -1,12 +1,12 @@
 # Informe de Preprocesamiento y Análisis Exploratorio
 
-Generado: 2026-06-23 14:32:44
+Generado: 2026-06-25 13:45:30
 
 ---
 
 ## 1. Dimensiones del Dataset
 - Filas: 22,300
-- Columnas: 23
+- Columnas: 18
 
 ## 2. Variable Objetivo: superficie_quemada
 - Media: 23.6946 ha
@@ -31,11 +31,11 @@ Generado: 2026-06-23 14:32:44
 - **Acción:** Eliminar columna id
 
 ### [MEDIUM] wrong_dtype
-- latitud es String, debería ser Float. Sample: ['39.301890792211985', '40.48727112950186', '43.20624833194064', '43.19146217178971', '41.995150508651065']
+- latitud es String, debería ser Float. Sample: ['42.12175405338978', '43.30377824576887', '40.13240919673983', '41.48871624779493', '40.089361687892676']
 - **Acción:** Convertir a Float64
 
 ### [MEDIUM] wrong_dtype
-- longitud es String, debería ser Float. Sample: ['-3.358931025029914', '-2.8618169177961565', '-3.583527198225713', '-4.365707586983788', '0.04701083136862927']
+- longitud es String, debería ser Float. Sample: ['0.009903892163752984', '-5.121906218760324', '-3.594707235914124', '-0.5586123212861214', '-3.3915027692683215']
 - **Acción:** Convertir a Float64
 
 ### [HIGH] high_skew
@@ -76,14 +76,14 @@ Generado: 2026-06-23 14:32:44
 ## 7. Correlaciones con Variable Objetivo (Top 10)
 - superficie_quemada: 1.0000
 - temperatura_media: 0.0669
-- temperatura_minima: 0.0666
-- humedad_relativa_maxima: -0.0630
-- temperatura_maxima: 0.0625
 - humedad_relativa_media: -0.0521
-- humedad_relativa_minima: -0.0470
 - trimestre: 0.0469
 - mes: 0.0448
-- racha_maxima_viento: 0.0331
+- velocidad_viento_media: 0.0300
+- altitud: -0.0191
+- año: 0.0128
+- precipitacion: -0.0103
+- causa_incendio: -0.0061
 
 ## 8. Transformaciones Aplicadas
 - **Target**: log1p(superficie_quemada)
