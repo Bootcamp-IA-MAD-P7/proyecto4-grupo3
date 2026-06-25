@@ -544,3 +544,30 @@ if __name__ == "__main__":
     else:
         jpt.write(jpt.read(_py), _nb, fmt="ipynb")
         print(f"Synced {_nb.name}")
+
+# %%
+import polars.selectors as cs
+
+def replace_outliers_with_median(
+    df: pl.DataFrame, col: str, factor: float = 1.5
+) -> pl.DataFrame:
+    q1 = df.select(pl.col(col).quantile(0.25)).item()
+    q3 = df.select(pl.col(col).quantile(0.75)).item()
+    iqr = q3 - q1
+    lower = q1 - factor * iqr
+    upper = q3 + factor * iqr
+    median = df.select(pl.col(col).median()).item()
+    return df.with_columns(
+        pl.when(pl.col(col).is_between(lower, upper))
+        .then(pl.col(col))
+        .otherwise(pl.lit(median))
+        .alias(col)
+    )
+
+
+# %%
+df_clean = df
+for col in [
+    "superficie_quemada",
+]:
+    df_clean = replace_outliers_with_median(df_clean, col)
