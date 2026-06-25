@@ -17,7 +17,6 @@ else:
     YEARS = range(2013, 2023)
 
 OUTPUT_DIR = "data/raw"
-
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 HEADERS = {"api_key": API_KEY}
@@ -40,7 +39,7 @@ def request_with_retry(url, max_retries=10):
             continue
         print(f"  HTTP {r.status_code}: {r.text[:200]}")
         time.sleep(wait)
-    raise Exception("Fallo tras múltiples reintentos")
+    raise Exception("Fallo tras multiples reintentos")
 
 
 def fetch_data(start, end):
@@ -96,7 +95,7 @@ for year in YEARS:
             df_total.to_csv(output_file, index=False)
 
             elapsed = time.time() - year_start
-            print(f"OK -> filas: {len(df_total)} | {elapsed/60:.2f} min año")
+            print(f"OK -> filas: {len(df_total)} | {elapsed/60:.2f} min ano")
 
             time.sleep(1.5)
 
@@ -111,11 +110,33 @@ for year in YEARS:
 
     year_elapsed = time.time() - year_start
     total_elapsed = time.time() - total_start
-    print(f"\nAño {year} completado. Filas: {len(df_final)} | Tiempo: {year_elapsed/60:.2f} min")
+    print(f"\nAno {year} completado. Filas: {len(df_final)} | Tiempo: {year_elapsed/60:.2f} min")
     print(f"Tiempo total transcurrido: {total_elapsed/60:.2f} min")
     print(f"Provincias: {sorted(df_final['provincia'].unique())}")
 
+# Unificar todos los anos en un solo CSV
 print(f"\n{'='*60}")
-print(f"DESCARGA COMPLETA (2013-2022)")
+print(f"UNIFICANDO TODOS LOS ANOS")
+print(f"{'='*60}")
+all_years = []
+for year in YEARS:
+    path = os.path.join(OUTPUT_DIR, f"aemet_{year}.csv")
+    if os.path.exists(path):
+        df = pd.read_csv(path)
+        all_years.append(df)
+        print(f"  {year}: {len(df)} filas")
+    else:
+        print(f"  {year}: archivo no encontrado, saltando")
+
+if all_years:
+    unified = pd.concat(all_years, ignore_index=True)
+    unified_path = os.path.join(OUTPUT_DIR, "aemet_all.csv")
+    unified.to_csv(unified_path, index=False)
+    print(f"\nUnificado guardado: {unified_path} ({len(unified)} filas totales)")
+else:
+    print("No se encontraron archivos para unificar")
+
+print(f"\n{'='*60}")
+print(f"DESCARGA COMPLETA ({YEARS[0]}-{YEARS[-1]})")
 print(f"{'='*60}")
 print(f"Tiempo total: {(time.time()-total_start)/60:.2f} min")

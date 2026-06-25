@@ -1,11 +1,10 @@
 """Merge AEMET weather data with fire incidents.
 
 Pipeline:
-  1. Load each AEMET yearly CSV → clean → group by (fecha, provincia) averaging weather
-  2. Concatenate all years
-  3. Load processed fires (fires-all-prepro.parquet)
-  4. Inner join on (fecha, provincia) → each fire gets that day's weather
-  5. Save merged dataset
+  1. Load unified AEMET CSV → clean → group by (fecha, provincia) averaging weather
+  2. Load processed fires (fires-all-prepro.parquet)
+  3. Inner join on (fecha, provincia) → each fire gets that day's weather
+  4. Save merged dataset
 
 Usage:
   python scripts/merge_datasets.py
@@ -18,7 +17,7 @@ RAW = Path("data/raw")
 PROCESSED = Path("data/processed")
 CLEANED = Path("data/cleaned")
 
-AEMET_PATTERN = "aemet_{}.csv"
+AEMET_FILE = RAW / "aemet_all.csv"
 FIRES_PATH = CLEANED / "fires_clean.parquet"
 OUTPUT_PATH = PROCESSED / "fires_weather_merged.parquet"
 
@@ -27,6 +26,9 @@ COLUMNS_KEEP = [
     "precipitacion",
     "humedad_relativa_media",
     "velocidad_viento_media",
+    "racha_maxima_viento",
+    "sol",
+    "dir",
 ]
 
 provincia_to_ccaa = {
@@ -92,31 +94,12 @@ provincia_to_ccaa = {
 
 
 def clean_aemet(df: pl.DataFrame) -> pl.DataFrame:
-    """Standardise and clean a single AEMET yearly DataFrame."""
-    df = df.drop(
-        [
-            "indicativo",
-            "nombre",
-            "horatmin",
-            "horatmax",
-            "horaHrMin",
-            "dir",
-            "horaracha",
-            "horaPresMax",
-            "horaPresMin",
-            "sol",
-            "horaHrMax",
-            "presMax",
-            "presMin",
-            "tmin",
-            "tmax",
-            "hrMax",
-            "hrMin",
-            "presMax",
-            "presMin",
-            "racha",
-        ]
-    )
+    """Standardise and clean the unified AEMET DataFrame."""
+    df = df.drop([
+        "indicativo", "nombre", "horatmin", "horatmax", "horaHrMin",
+        "horaracha", "horaPresMax", "horaPresMin",
+        "horaHrMax", "presMax", "presMin",
+    ])
 
     df = df.with_columns(
         pl.col("provincia")
@@ -125,35 +108,37 @@ def clean_aemet(df: pl.DataFrame) -> pl.DataFrame:
         .alias("cc_aa")
     )
 
-    # Rename
-    df = df.rename(
-        {
-            "tmed": "temperatura_media",
-            "prec": "precipitacion",
-            "hrMedia": "humedad_relativa_media",
-            "velmedia": "velocidad_viento_media",
-        }
-    )
+    df = df.rename({
+        "tmed": "temperatura_media",
+        "prec": "precipitacion",
+        "hrMedia": "humedad_relativa_media",
+        "velmedia": "velocidad_viento_media",
+        "racha": "racha_maxima_viento",
+        "tmin": "temperatura_minima",
+        "tmax": "temperatura_maxima",
+        "hrMax": "humedad_relativa_maxima",
+        "hrMin": "humedad_relativa_minima",
+    })
 
-    # Filter out non-numeric markers in precipitation
     df = df.filter(~pl.col("precipitacion").is_in(["Ip", "Acum"]))
 
-    # Convert comma decimals → float for weather cols
     for col in [
-        "temperatura_media",
-        "precipitacion",
-        "velocidad_viento_media",
+        "temperatura_media", "temperatura_minima", "temperatura_maxima",
+        "precipitacion", "velocidad_viento_media", "racha_maxima_viento",
+        "sol",
     ]:
-        df = df.with_columns(pl.col(col).str.replace(",", ".").cast(pl.Float64))
+        if col in df.columns:
+            df = df.with_columns(
+                pl.col(col).str.replace(",", ".").cast(pl.Float64)
+            )
 
-    # Parse date
+    for col in ["dir"]:
+        if col in df.columns:
+            df = df.with_columns(pl.col(col).cast(pl.Int32))
+
     df = df.with_columns(pl.col("fecha").str.to_date("%Y-%m-%d"))
 
-    # Drop nulls in core weather columns
-    core = [
-        "temperatura_media",
-        "precipitacion",
-    ]
+    core = ["temperatura_media", "precipitacion"]
     df = df.drop_nulls(subset=core)
 
     return df
@@ -180,34 +165,27 @@ def load_fires(path: Path) -> pl.DataFrame:
 
 
 def main():
-    years = range(2013, 2023)
+    print(f"Loading AEMET from {AEMET_FILE}...")
+    df = pl.read_csv(
+        AEMET_FILE,
+        schema_overrides={"horaPresMin": pl.Utf8},
+        null_values=["Varias"],
+    )
+    print(f"  Raw AEMET: {df.shape} rows")
 
-    # 1. Process each AEMET file with map
-    aemet_files = [RAW / AEMET_PATTERN.format(y) for y in years]
+    print("Cleaning AEMET...")
+    df = clean_aemet(df)
 
-    def load_and_process(path):
-        df = pl.read_csv(
-            path,
-            schema_overrides={"horaPresMin": pl.Utf8},
-            null_values=["Varias"],
-        )
-        df = clean_aemet(df)
-        return average_per_day(df)
+    print("Averaging per day...")
+    aemet_all = average_per_day(df)
+    print(f"  AEMET cleaned: {aemet_all.shape} rows")
 
-    print("Processing AEMET files...")
-    results = list(map(load_and_process, aemet_files))
-    aemet_all = pl.concat(results)
-    print(f"  AEMET combined: {aemet_all.shape} rows")
-
-    # 2. Load fires
     print("Loading fires...")
     fires = load_fires(FIRES_PATH)
     print(f"  Fires: {fires.shape} rows")
 
-    # 3. Drop fires' cc_aa (same as AEMET's)
     fires = fires.drop("cc_aa")
 
-    # 4. Inner join on (fecha, provincia)
     print("Merging...")
     merged = aemet_all.join(
         fires,
@@ -216,7 +194,6 @@ def main():
     )
     print(f"  Merged: {merged.shape} rows")
 
-    # 5. Save
     PROCESSED.mkdir(parents=True, exist_ok=True)
     merged.write_parquet(OUTPUT_PATH)
     print(f"Saved to {OUTPUT_PATH}")
