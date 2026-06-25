@@ -22,4 +22,5 @@ dependencies = [
     "xarray>=2026.4.0",
     "altair>=6.2.1",
     "dotenv>=0.9.9",
+    "xgboost>=3.3.0",
 ]
