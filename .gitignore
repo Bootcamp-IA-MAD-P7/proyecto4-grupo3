@@ -224,5 +224,9 @@ __marimo__/
 # Data
 data/
 
+# Generated artifacts
+models/
+reports/
+
 # Streamlit
 .streamlit/secrets.toml
