@@ -3,12 +3,6 @@ __pycache__/
 *.py[codz]
 *$py.class
 
-# uv
-.venv/
-.uv/
-uv.lock
-.ipynb_checkpoints/
-
 # C extensions
 *.so
 
@@ -221,12 +215,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Generated artifacts
-models/
-
 # Large generated dataset (reproducible via unify_aemet.py)
 data/raw/aemet_all.csv
-reports/
 
 # Streamlit
 .streamlit/secrets.toml
