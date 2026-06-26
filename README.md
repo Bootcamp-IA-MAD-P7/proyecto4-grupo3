@@ -1,246 +1,239 @@
-# Predicción de Superficie Quemada (Incendios Forestales)
+# Wildfire Burned Area Prediction
 
-Pipeline de regresión para estimar la superficie quemada en incendios forestales usando datos meteorológicos de AEMET.
+A regression pipeline that estimates the burned area (hectares) of forest wildfires using historical weather data from the Spanish meteorological agency (AEMET) and fire incident records.
+
+The pipeline downloads weather data via the AEMET OpenData API, merges it with cleaned fire incident records, engineers features, trains and evaluates four regression models, and selects the best one based on generalization performance.
 
 ---
 
-## Estructura del proyecto
+## Technologies
+
+- **Python 3.12** with `uv` for dependency management
+- **Polars** for high-performance DataFrame operations (data loading, cleaning, grouping)
+- **Scikit-learn** for preprocessing (StandardScaler, OneHotEncoder, ColumnTransformer) and baseline models (LinearRegression, RandomForestRegressor)
+- **XGBoost** and **LightGBM** for gradient-boosted tree models
+- **Optuna** for hyperparameter optimization (30 trials, overfitting penalty)
+- **Joblib** for model serialization
+- **Streamlit** for the interactive prediction web interface
+- **Docker** for containerized deployment
+
+---
+
+## Project Structure
 
 ```
 proyecto4-grupo3/
-├── main.py                          ← PUNTO DE ENTRADA
-├── app.py                           ← INTERFAZ STREAMLIT
+├── main.py                          Entry point (runs full pipeline)
+├── app.py                           Streamlit prediction interface
+├── Dockerfile                       Docker image definition
+├── docker-compose.yml               Docker Compose configuration
+├── pyproject.toml                   Project metadata and dependencies
 ├── scripts/
-│   ├── fetch_aemet.py               ← Descarga datos AEMET
-│   └── merge_datasets.py            ← Fusiona incendios + meteorología
+│   ├── fetch_aemet.py               Downloads AEMET weather data (per-year CSVs)
+│   ├── unify_aemet.py               Concatenates yearly CSVs into aemet_all.csv
+│   └── merge_datasets.py            Merges fire incidents with weather data
 ├── src/
-│   ├── config.py                    ← Constantes, rutas, hiperparámetros
-│   ├── pipeline.py                  ← Orquestador (Fase 1 + Fase 2)
-│   ├── preprocess.py                ← Preprocesamiento + feature engineering
-│   ├── train.py                     ← Entrenamiento de 4 modelos
-│   ├── predict.py                   ← Predicción en producción
-│   └── eda.py                       ← Análisis exploratorio (no usado en pipeline)
-├── data/processed/
-│   └── fires_weather_merged.parquet ← DATASET FINAL (21 columnas, 22300 filas)
-├── models/
-│   ├── best_model.joblib            ← Modelo XGBoost guardado
-│   ├── preprocessor.joblib          ← ColumnTransformer (StandardScaler + OHE)
-│   ├── target_transformer.joblib    ← LogTransformer (log1p / expm1)
-│   └── target_encoding.joblib       ← Mapas de target encoding
-└── reports/figures/                 ← Gráficos (predicciones, residuos, importancia)
+│   ├── config.py                    Paths, feature lists, hyperparameters
+│   ├── pipeline.py                  Pipeline orchestrator
+│   ├── preprocess.py                Feature engineering and preprocessing
+│   ├── train.py                     Model training, evaluation, and selection
+│   └── predict.py                   Production inference helpers
+├── data/
+│   ├── raw/                         Raw AEMET CSVs and fire incidents CSV
+│   ├── cleaned/                     Cleaned datasets (parquet)
+│   └── processed/
+│       └── fires_weather_merged.parquet  Final merged dataset (21 columns, 22300 rows)
+├── models/                          Trained model artifacts (joblib)
+│   ├── best_model.joblib
+│   ├── preprocessor.joblib
+│   ├── target_transformer.joblib
+│   └── target_encoding.joblib
+└── reports/figures/                 Evaluation plots (predictions, residuals, feature importance)
 ```
 
 ---
 
-## Columnas del dataset (`fires_weather_merged.parquet`)
+## Pipeline Overview
 
-| Columna | Tipo | Se usa | Notas |
-|---------|------|--------|-------|
-| `provincia` | String | Sí → target encoding | 39 provincias |
-| `cc_aa` | String | Sí → target encoding | 17 CCAA, se deriva de provincia |
-| `altitud` | Float64 | Sí | 2122 valores únicos |
-| `latitud` | String → Float64 | Sí | Proxy geográfico |
-| `longitud` | String → Float64 | Sí | Proxy geográfico |
-| `temperatura_media` | Float64 | Sí | Temperatura media diaria |
-| `precipitacion` | Float64 | Sí | Precipitación acumulada |
-| `humedad_relativa_media` | Float64 | Sí | Humedad relativa media |
-| `velocidad_viento_media` | Float64 | Sí | Velocidad del viento |
-| `racha_maxima_viento` | Float64 | Sí | Racha máxima |
-| `sol` | Float64 | Sí | Horas de sol (246 nulos imputados) |
-| `dir` | Float64 | Sí → dir_sin/dir_cos | Dirección del viento (0-36) |
-| `causa_incendio` | Int64 | Sí → one-hot (6 categorías) | 1=rayo,…,6=otras |
-| `mes` | Int8 | Sí → one-hot (12 categorías) | 1-12 |
-| `superficie_quemada` | Float64 | **TARGET** | Variable a predecir (cappeada a 10 ha) |
-| `id` | Int64 | No | Eliminada |
-| `fecha` | Date | No | Eliminada |
-| `fecha_incendio` | Date | No | Eliminada |
-| `año` | Int32 | No | Eliminada |
-| `trimestre` | Int8 | No | Eliminada |
-| `month_name` | String | No | Eliminada |
+### Phase 0: Data Preparation (one-time setup)
 
----
+1. **`scripts/fetch_aemet.py`** downloads daily weather data from the AEMET OpenData API in 14-day blocks for each year (default: 2013-2022). Saves one CSV per year to `data/raw/aemet_{year}.csv`. Requires `AEMET_API_KEY` in `.env`.
+2. **`scripts/unify_aemet.py`** concatenates all yearly CSVs into `data/raw/aemet_all.csv`.
+3. **`scripts/merge_datasets.py`** loads the unified AEMET data, cleans and standardizes column names, maps provinces to autonomous communities (`cc_aa`), averages weather values per day and province, then performs an inner join with cleaned fire incidents (`data/cleaned/fires_clean.parquet`) on `(fecha, provincia)`. The result is saved to `data/processed/fires_weather_merged.parquet`.
 
-## Features creadas (ingeniería)
+### Phase 1: Training Pipeline (`main.py`)
 
-| Feature | Creada en | Fórmula | Propósito |
-|---------|-----------|---------|-----------|
-| `dir_sin`, `dir_cos` | `prepare_features()` | `sin(dir×10×π/180)`, `cos(...)` | Codificación circular del viento (0°=360°) |
-| `temp_hum_interaction` | `prepare_features()` | `temp_media × humedad_media` | Sinergia calor + sequedad |
-| `temp_wind_interaction` | `prepare_features()` | `temp_media × viento_media` | Sinergia calor + viento |
-| `hum_wind_interaction` | `prepare_features()` | `humedad_media × viento_media` | Sinergia sequedad + viento |
-| `provincia_te` | `apply_target_encoding()` | Media de target por provincia (smoothing α=10) | Riesgo basal por provincia |
-| `provincia_mes_te` | `apply_target_encoding()` | Media de target por (provincia, mes) | Estacionalidad regional |
-| `cc_aa_te` | `apply_target_encoding()` | Media de target por CCAA | Riesgo basal por comunidad (más estable) |
-| `cc_aa_mes_te` | `apply_target_encoding()` | Media de target por (CCAA, mes) | Estacionalidad por comunidad |
+`main.py` runs the full training pipeline:
 
-Total: **18 numéricas + 18 one-hot (6 causa + 12 mes) = 36 features** que entran al modelo.
+- **Features (21 columns in, 18 numeric + 18 one-hot = 36 out):**
+  - Weather: temperature, precipitation, humidity, wind speed, wind gusts, sunshine hours, wind direction
+  - Geographic: altitude, latitude, longitude, autonomous community
+  - Temporal: month
+  - Categorical: fire cause (6 types)
+  - Engineered: wind direction sin/cos encoding, 3 interaction features (temp-humidity, temp-wind, humidity-wind), 4 target-encoded features (province, province-month, community, community-month)
+
+- **Target:** `superficie_quemada` (burned area in hectares), capped at 10.0 ha and log-transformed with `log1p`.
+
+- **Models trained:**
+  1. Linear Regression (baseline)
+  2. Random Forest (max_depth=8, n_estimators=200)
+  3. XGBoost (hyperparameters optimized via Optuna, 30 trials)
+  4. LightGBM (fixed hyperparameters)
+
+- **Model selection:** Filters out models with over 5% train-test R2 gap, then selects the model with the highest test R2.
+
+- **Outputs saved to `models/`:**
+  - `best_model.joblib` - the selected model
+  - `preprocessor.joblib` - fitted ColumnTransformer (StandardScaler + OneHotEncoder)
+  - `target_transformer.joblib` - LogTransformer for log1p/expm1
+  - `target_encoding.joblib` - target encoding mappings
+
+- **Plots saved to `reports/figures/`:** prediction scatter plots, residual histograms, feature importance bar charts.
+
+### Phase 2: Inference (Streamlit)
+
+`app.py` loads the four model artifacts and provides a sidebar form with 14 input fields (province, fire cause, month, altitude, temperature, humidity, precipitation, sunshine, wind speed, wind gusts, wind direction, latitude, longitude). On prediction, it applies the same feature engineering pipeline used during training and displays the estimated burned area in hectares with a severity classification (Conato < 3 ha, Small < 10 ha, Medium < 50 ha, Large >= 50 ha).
 
 ---
 
-## Flujo completo
+## Installation
 
-### 0. Preparación de datos (manual)
+### Prerequisites
 
-**`scripts/fetch_aemet.py`** — descarga datos meteorológicos históricos de AEMET.
+- Python 3.12 or later
+- `uv` package manager ([install guide](https://docs.astral.sh/uv/getting-started/installation/))
+- (Optional) Docker
 
-**`scripts/merge_datasets.py`** — cruza incendios + AEMET y genera `fires_weather_merged.parquet`.
-
-### 1. Ejecución: `uv run python main.py`
-
-```
-main.py
-  3-6   logging.basicConfig(level=INFO)     ← Configura logs limpios
-  7     logging.getLogger("optuna").setLevel(WARNING)  ← Silencia Optuna
-  9     from src.pipeline import main
- 11-12  if __name__ == "__main__": main()
-```
-
-### 2. `src/pipeline.py` → Orquestador
-
-```
-pipeline.main()
-├── FASE 1: preprocess.run_preprocessing(MERGED_DATA_PATH)
-└── FASE 2: train.run_training(X_train, X_test, y_train, y_test, preprocessor, ...)
-```
-
-### 3. FASE 1: Preprocesamiento → `src/preprocess.py`
-
-| Paso | Función | Línea | Qué hace |
-|------|---------|-------|----------|
-| Cargar datos | — | 152 | `pl.read_parquet(...)` |
-| Capping target | — | 155-158 | `superficie_quemada.clip(upper=10.0)` |
-| Feature engineering | `prepare_features()` | 160-162 | Crea interacciones, dir_sin/cos, imputa |
-| Split train/test | `split_data()` | 164-165 | 80/20 → 17840/4460 |
-| Target encoding | `apply_target_encoding()` | 167-168 | provincia_te, cc_aa_te, etc. |
-| Log transform | `LogTransformer()` | 170-174 | `y = log1p(target)` |
-| ColumnTransformer | `build_preprocessor()` | 176-181 | StandardScaler + OneHotEncoder |
-| Guardar artefactos | `joblib.dump()` | 183-191 | 4 archivos en `models/` |
-
-**`prepare_features()` (L60-92):**
-- `encode_dir_circular()`: `dir` (escala 0-36) → `dir_sin`, `dir_cos`
-- `latitud`, `longitud`: string → float64
-- Elimina columnas de `FEATURES_TO_DROP` (`id`, `fecha`, `año`, `dir`, etc.)
-- Imputa nulos con mediana (solo `sol` tiene 246 nulos)
-- Crea 3 interacciones: `temp_hum`, `temp_wind`, `hum_wind`
-
-**`apply_target_encoding()` (L95-128):**
-- Para cada grupo: calcula media del target con smoothing α=10
-- `(sum + global_mean × 10) / (count + 10)` — evita overfitting en grupos pequeños
-- Elimina columnas originales (`provincia`, `cc_aa`)
-
-**`build_preprocessor()` (L142-148):**
-- `("num", StandardScaler(), FEATURES_NUMERIC)` → 18 columnas escaladas
-- `("cat", OneHotEncoder(), FEATURES_CATEGORICAL)` → 18 columnas (6+12)
-
-### 4. FASE 2: Entrenamiento → `src/train.py`
-
-**`run_training()` (L233-339)** entrena 4 modelos:
-
-| Modelo | Función | Líneas | Hiperparámetros clave |
-|--------|---------|--------|-----------------------|
-| Linear Regression | `train_linear_regression()` | 22-25 | Por defecto |
-| Random Forest | `train_random_forest()` | 28-35 | max_depth=8, n_estimators=200, min_samples_leaf=10 |
-| XGBoost (Optuna) | `optimize_xgboost()` + `XGBRegressor` | 177-224 + 266-278 | 30 trials, penaliza overfitting |
-| LightGBM | `train_lightgbm()` | 38-46 | max_depth=5, n_estimators=300, lr=0.05 |
-
-**`optimize_xgboost()` (L177-224):** Busca 7 parámetros con Optuna:
-- `n_estimators` (100-400), `max_depth` (3-5), `learning_rate` (0.01-0.15)
-- `subsample` (0.6-1.0), `colsample_bytree` (0.5-1.0)
-- `reg_alpha` (0.5-5), `reg_lambda` (0.5-5), `min_child_weight` (3-10)
-- Penaliza overfitting: objetivo = `r2_val - 2×max(0, r2_train-r2_val-0.05)`
-
-**`evaluate_model()` (L78-113):**
-- Predice train y test, deshace log1p con `expm1`
-- Calcula MAE, RMSE, R², overfitting
-
-**Gráficos guardados en `reports/figures/`:**
-- `predictions_{modelo}.png` — scatter real vs predicción
-- `residuals_{modelo}.png` — histograma + residuos vs predicción
-- `feature_importance_{modelo}.png` — top 20 variables (RF y XGBoost)
-
-**Selección del mejor modelo (L315-337):**
-- Filtra modelos con overfitting (R²_train − R²_test) < 5%
-- Entre esos, elige el de mayor R² en test
-- Guarda con `joblib.dump()` en `models/best_model.joblib`
-
-### 5. Predicción → `src/predict.py`
-
-**`predict_single(input_data: dict)` (L103-114):**
-1. Carga los 4 artefactos de `models/`
-2. `prepare_input_for_prediction()` — replica el feature engineering del training
-3. `preprocessor.transform()` — escala y one-hot
-4. `model.predict()` — predicción en log-scale
-5. `target_transformer.inverse_transform()` — expm1 → hectáreas
-
-**`prepare_input_for_prediction()` (L67-100):**
-- Deriva `cc_aa` desde `provincia` usando mapa PROVINCIA_TO_CCAA
-- Convierte lat/long a float
-- Calcula dir_sin/cos, interacciones
-- Aplica target encoding con mappings guardados
-- Elimina columnas originales
-
-### 6. Interfaz → `app.py`
-
-- `load_artifacts()` — carga los 4 modelos con cache
-- 14 inputs en sidebar: provincia, causa, mes, altitud, latitud, longitud, temperatura_media, precipitacion, humedad, viento, racha, sol, dirección del viento
-- Al predecir: feature engineering → preprocessor → modelo → muestra resultado en hectáreas con categoría (Conato < 3 ha, Pequeño < 10 ha, Mediano < 50 ha, Grande ≥ 50 ha)
-
----
-
-## Configuración global → `src/config.py`
-
-| Constante | Valor | Propósito |
-|-----------|-------|-----------|
-| `MERGED_DATA_PATH` | `data/processed/fires_weather_merged.parquet` | Dataset de entrada |
-| `MODEL_PATH` | `models/best_model.joblib` | Modelo serializado |
-| `PREPROCESSOR_PATH` | `models/preprocessor.joblib` | ColumnTransformer serializado |
-| `TARGET_TRANSFORMER_PATH` | `models/target_transformer.joblib` | LogTransformer serializado |
-| `TARGET_ENCODING_PATH` | `models/target_encoding.joblib` | Mapas de target encoding |
-| `TARGET` | `superficie_quemada` | Variable objetivo |
-| `FEATURES_NUMERIC` | 18 columnas | Escaladas con StandardScaler |
-| `FEATURES_CATEGORICAL` | `["causa_incendio", "mes"]` | One-hot encode |
-| `FEATURES_TO_DROP` | 7 columnas | Eliminadas en prepare_features |
-| `TARGET_CAP` | 10.0 ha | Capping del target |
-| `RANDOM_STATE` | 42 | Semilla global |
-| `TEST_SIZE` | 0.2 | Proporción de test |
-
----
-
-## Resumen visual del flujo
-
-```
-scripts/merge_datasets.py
-        ↓
-fires_weather_merged.parquet (21 cols, 22300 filas)
-        ↓
-main.py → pipeline.main()
-        ↓
-├─ FASE 1: preprocess.run_preprocessing()
-│   ├─ prepare_features():      dir→dir_sin/cos, lat/long→float, imputa, +3 interacciones
-│   ├─ split_data():            80/20 train/test (17840/4460)
-│   ├─ apply_target_encoding(): provincia→provincia_te, cc_aa→cc_aa_te, +2 mes
-│   ├─ LogTransformer():        y = log1p(target)
-│   ├─ build_preprocessor():    ColumnTransformer(StandardScaler + OHE)
-│   └─ joblib.dump():           models/{preprocessor,target_transformer,target_encoding}.joblib
-│
-└─ FASE 2: train.run_training()
-    ├─ LinearRegression      → evaluate → plot → ¿overfitting < 5%?
-    ├─ RandomForest          → evaluate → plot → ¿overfitting < 5%?
-    ├─ optimize_xgboost()    → Optuna 30 trials → best params
-    ├─ XGBoost(best_params)  → evaluate → plot → feature importance
-    ├─ LightGBM              → evaluate → plot → ¿overfitting < 5%?
-    ├─ cross_validate_kfold()→ K-Fold CV con XGBoost
-    ├─ Comparación:          elige mejor R² con overfitting < 5%
-    └─ joblib.dump(model)   → models/best_model.joblib
-
-app.py → prepare_input_for_prediction() → preprocessor → model → resultado
-```
-
----
-
-## Comandos
+### Local Setup
 
 ```bash
-uv run python main.py              # Entrena el pipeline completo
-uv run streamlit run app.py        # Lanza la interfaz
+# Clone the repository
+git clone <repo-url>
+cd proyecto4-grupo3
+
+# Install dependencies
+uv sync
+
+# Set up AEMET API key (required only for downloading weather data)
+cp .env.example .env
+# Edit .env and add your AEMET_API_KEY
+
+# (Optional) Download weather data and prepare datasets
+uv run python scripts/fetch_aemet.py
+uv run python scripts/unify_aemet.py
+uv run python scripts/merge_datasets.py
+
+# Run the full training pipeline
+uv run python main.py
+
+# Launch the Streamlit interface
+uv run streamlit run app.py
+```
+
+### Docker Setup
+
+```bash
+# Build and run with Docker Compose
+docker compose up --build
+
+# The Streamlit app is available at http://localhost:8501
+```
+
+The `docker-compose.yml` mounts the local `models/` directory into the container, so trained artifacts persist across rebuilds.
+
+---
+
+## Docker Details
+
+### Dockerfile
+
+- Base image: `python:3.12-slim`
+- `uv` is installed via pip
+- `uv sync` installs all project dependencies from `pyproject.toml`
+- Exposes port 8501 (Streamlit)
+- Default command runs `streamlit run app.py` on `0.0.0.0`
+
+### docker-compose.yml
+
+- Maps host port 8501 to container port 8501
+- Mounts `./models:/app/models` for persistent model artifacts
+
+---
+
+## Dataset Details
+
+The final merged dataset (`fires_weather_merged.parquet`) contains 22,300 rows and 21 columns:
+
+**Weather features (from AEMET):**
+- `temperatura_media` - mean daily temperature (Celsius)
+- `precipitacion` - daily precipitation (mm)
+- `humedad_relativa_media` - mean relative humidity (%)
+- `velocidad_viento_media` - mean wind speed (m/s)
+- `racha_maxima_viento` - maximum wind gust (m/s)
+- `sol` - sunshine hours (246 nulls imputed with median 9.425)
+- `dir` - wind direction (0-36 scale, encoded as sin/cos)
+
+**Geographic features:**
+- `provincia` - province (39 unique values, target-encoded)
+- `cc_aa` - autonomous community (17 values, derived from province)
+- `altitud` - altitude (meters)
+
+**Fire incident features:**
+- `latitud` / `longitud` - fire coordinates
+- `causa_incendio` - fire cause (6 categories: lightning, agricultural burn, forest burn, intentional, negligence, other)
+- `mes` - month (1-12)
+- `superficie_quemada` - target variable (burned area in hectares)
+
+**Columns dropped during preprocessing:**
+`id`, `fecha`, `fecha_incendio`, `año`, `trimestre`, `month_name`, `cc_aa_right`, `dir`
+
+---
+
+## Results
+
+The model selection logic prioritizes generalization by filtering out models with train-test R2 gap exceeding 5%. Typical results show Linear Regression as the most stable model (lowest overfitting), while tree-based models achieve higher training performance but exhibit more overfitting.
+
+Evaluation metrics are computed in the original hectare scale (after inverse log1p transformation):
+
+- Mean Absolute Error (MAE)
+- Root Mean Squared Error (RMSE)
+- R-squared (R2)
+
+---
+
+## Configuration
+
+All paths, feature lists, and hyperparameters are centralized in `src/config.py`. Key constants:
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `MERGED_DATA_PATH` | `data/processed/fires_weather_merged.parquet` | Input dataset |
+| `MODEL_PATH` | `models/best_model.joblib` | Trained model output |
+| `TARGET` | `superficie_quemada` | Target variable |
+| `TARGET_CAP` | 10.0 ha | Target capping threshold |
+| `TEST_SIZE` | 0.2 | Test split proportion |
+| `RANDOM_STATE` | 42 | Global reproducibility seed |
+
+---
+
+## Quick Reference
+
+```bash
+# Train the full pipeline
+uv run python main.py
+
+# Launch the web interface
+uv run streamlit run app.py
+
+# Download weather data (requires AEMET_API_KEY)
+uv run python scripts/fetch_aemet.py
+
+# Unify yearly CSVs
+uv run python scripts/unify_aemet.py
+
+# Merge weather with fire incidents
+uv run python scripts/merge_datasets.py
+
+# Docker
+docker compose up --build
 ```
