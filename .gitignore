@@ -223,6 +223,9 @@ __marimo__/
 
 # Generated artifacts
 models/
+
+# Large generated dataset (reproducible via unify_aemet.py)
+data/raw/aemet_all.csv
 reports/
 
 # Streamlit
