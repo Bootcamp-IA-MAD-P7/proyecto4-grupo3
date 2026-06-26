@@ -23,4 +23,6 @@ dependencies = [
     "altair>=6.2.1",
     "dotenv>=0.9.9",
     "xgboost>=3.3.0",
+    "lightgbm>=4.6.0",
+    "optuna>=4.9.0",
 ]
